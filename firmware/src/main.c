@@ -13,17 +13,11 @@
 /* defines                                                              */
 /************************************************************************/
 
-// LEDs
-#define LED_PIO      PIOC
-#define LED_PIO_ID   ID_PIOC
-#define LED_IDX      8
-#define LED_IDX_MASK (1 << LED_IDX)
-
 // Botão
-#define BUT_PIO      PIOA
-#define BUT_PIO_ID   ID_PIOA
-#define BUT_IDX      11
-#define BUT_IDX_MASK (1 << BUT_IDX)
+#define BUT_VERDE2_PIO             	PIOB // TODO: alterar PIO para o botao correto
+#define BUT_VERDE2_PIO_ID          	ID_PIOB
+#define BUT_VERDE2_PIO_IDX         	3
+#define BUT_VERDE2_PIO_IDX_MASK     (1 << BUT_VERDE_PIO_IDX)
 
 #define BUT_VERDE_PIO             	PIOB
 #define BUT_VERDE_PIO_ID          	ID_PIOB
@@ -159,12 +153,22 @@ void but_verde_callback(void){
 	
 	xQueueSendFromISR(xQueueButton, &p, 0);
 }
+
+void but_verde2_callback(void){
+	pack p;
+	p.tipo = 'b';
+	p.value = 1;
+	
+	xQueueSendFromISR(xQueueButton, &p, 0);
+}
+
 void but_vermelho_callback(void){
 	pack p;
 	p.tipo = 'b';
 	p.value = 2;
 	xQueueSendFromISR(xQueueButton, &p, 0);
 }
+
 void but_azul_callback(void){
 	pack p;
 	p.tipo = 'b';
@@ -179,31 +183,30 @@ static void AFEC_pot0_callback(void) {
     xQueueSendFromISR(xQueueADC, &adc, &xHigherPriorityTaskWoken);
 }
 
-
-
 void io_init(void) {
 
 // Ativa PIOs
 	pmc_enable_periph_clk(ID_PIOA);
+	pmc_enable_periph_clk(ID_PIOB);
 	pmc_enable_periph_clk(ID_PIOC);
 	pmc_enable_periph_clk(ID_PIOD);
-	pmc_enable_periph_clk(ID_PIOB);
 	
 	// Configura Pinos
-	pio_configure(LED_PIO, PIO_OUTPUT_1, LED_IDX_MASK, PIO_DEFAULT | PIO_DEBOUNCE);
-	pio_configure(BUT_PIO, PIO_INPUT, BUT_IDX_MASK, PIO_PULLUP);
-
 	pio_configure(BUT_VERDE_PIO, PIO_INPUT, BUT_VERDE_PIO_IDX_MASK, PIO_PULLUP| PIO_DEBOUNCE);
 	pio_set_debounce_filter(BUT_VERDE_PIO, BUT_VERDE_PIO_IDX_MASK, 60);
+	pio_configure(BUT_VERDE2_PIO, PIO_INPUT, BUT_VERDE2_PIO_IDX_MASK, PIO_PULLUP| PIO_DEBOUNCE);
+	pio_set_debounce_filter(BUT_VERDE2_PIO, BUT_VERDE2_PIO_IDX_MASK, 60);
 	pio_configure(BUT_VERMELHO_PIO, PIO_INPUT, BUT_VERMELHO_PIO_IDX_MASK, PIO_PULLUP| PIO_DEBOUNCE);
 	pio_set_debounce_filter(BUT_VERMELHO_PIO, BUT_VERMELHO_PIO_IDX_MASK, 60);
 	pio_configure(BUT_AZUL_PIO, PIO_INPUT, BUT_AZUL_PIO_IDX_MASK, PIO_PULLUP| PIO_DEBOUNCE);
 	pio_set_debounce_filter(BUT_AZUL_PIO, BUT_AZUL_PIO_IDX_MASK, 60);
 
-		
 	pio_handler_set(BUT_VERDE_PIO, BUT_VERDE_PIO_ID, BUT_VERDE_PIO_IDX_MASK, PIO_IT_FALL_EDGE,
 		but_verde_callback);
-			
+
+	pio_handler_set(BUT_VERDE2_PIO, BUT_VERDE2_PIO_ID, BUT_VERDE2_PIO_IDX_MASK, PIO_IT_FALL_EDGE,
+		but_verde2_callback);
+
 	pio_handler_set(BUT_VERMELHO_PIO, BUT_VERMELHO_PIO_ID, BUT_VERMELHO_PIO_IDX_MASK, PIO_IT_FALL_EDGE,
 		but_vermelho_callback);
 	
@@ -211,10 +214,12 @@ void io_init(void) {
 		but_azul_callback);
 	
 	pio_enable_interrupt(BUT_VERDE_PIO, BUT_VERDE_PIO_IDX_MASK);
+	pio_enable_interrupt(BUT_VERDE2_PIO, BUT_VERDE2_PIO_IDX_MASK);
 	pio_enable_interrupt(BUT_VERMELHO_PIO, BUT_VERMELHO_PIO_IDX_MASK);
 	pio_enable_interrupt(BUT_AZUL_PIO, BUT_AZUL_PIO_IDX_MASK);
 	
 	pio_get_interrupt_status(BUT_VERDE_PIO);
+	pio_get_interrupt_status(BUT_VERDE2_PIO);
 	pio_get_interrupt_status(BUT_VERMELHO_PIO);
 	pio_get_interrupt_status(BUT_AZUL_PIO);
 
@@ -224,9 +229,12 @@ void io_init(void) {
 	NVIC_EnableIRQ(BUT_VERDE_PIO_ID);
 	NVIC_SetPriority(BUT_VERDE_PIO_ID, 4);
 
+	NVIC_EnableIRQ(BUT_VERDE2_PIO_ID);
+	NVIC_SetPriority(BUT_VERDE2_PIO_ID, 4);
+
 	NVIC_EnableIRQ(BUT_AZUL_PIO_ID);
 	NVIC_SetPriority(BUT_AZUL_PIO_ID, 4);
-	
+
 	NVIC_EnableIRQ(BUT_VERMELHO_PIO_ID);
 	NVIC_SetPriority(BUT_VERMELHO_PIO_ID, 4);
 }
