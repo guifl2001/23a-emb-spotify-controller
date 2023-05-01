@@ -41,7 +41,6 @@ class SerialControllerInterface:
                 logging.info(f"KEYDOWN {valor}")
                 if valor  == 1:
                     pyautogui.hotkey('ctrl', 'LEFT')
-
                 elif valor ==2:
                     pyautogui.press('space')
                 elif valor ==3:
