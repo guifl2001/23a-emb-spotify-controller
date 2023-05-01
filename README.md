@@ -6,7 +6,7 @@ Desenvolvendo um controle remoto para o aplicativo spotify
 
 ### Integrantes
 
-- Enrico Gemmha
+- Enricco Gemha
 - Guilherme Fontana Louro
 
 ### Ideia
