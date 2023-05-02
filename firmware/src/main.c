@@ -113,13 +113,9 @@ extern void vApplicationTickHook(void);
 extern void vApplicationMallocFailedHook(void);
 extern void xPortSysTickHandler(void);
 
-
-static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel,
-                            afec_callback_t callback);
+static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel, afec_callback_t callback);
 void task_bluetooth(void);
 void PWM_init(Pwm *p_pwm, uint id_pwm, pwm_channel_t *p_channel, uint channel, uint duty);
-void wheel( uint WheelPos, uint *r, uint *g, uint *b );
-
 /************************************************************************/
 /* constants                                                            */
 /************************************************************************/
@@ -206,7 +202,6 @@ void but_azul_callback(void){
 /************************************************************************/
 /* funcoes                                                              */
 /************************************************************************/
-
 static void AFEC_pot0_callback(void) {
     ADCData adc;
     adc.value = afec_channel_get_value(AFEC_POT0, AFEC_POT0_CHANNEL);
@@ -305,8 +300,7 @@ void PWM_init(Pwm *p_pwm, uint id_pwm, pwm_channel_t *p_channel, uint channel, u
 	pwm_channel_enable(p_pwm, channel);
 }
 
-static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel,
-                            afec_callback_t callback) {
+static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel, afec_callback_t callback) {
     /*************************************
      * Ativa e configura AFEC
      *************************************/
@@ -405,8 +399,7 @@ int usart_get_string(Usart *usart, char buffer[], int bufferlen, uint timeout_ms
 	return counter;
 }
 
-void usart_send_command(Usart *usart, char buffer_rx[], int bufferlen,
-char buffer_tx[], int timeout) {
+void usart_send_command(Usart *usart, char buffer_rx[], int bufferlen, char buffer_tx[], int timeout) {
 	usart_put_string(usart, buffer_tx);
 	usart_get_string(usart, buffer_rx, bufferlen, timeout);
 }
@@ -439,11 +432,9 @@ int hc05_init(void) {
 	vTaskDelay( 500 / portTICK_PERIOD_MS);
 	usart_send_command(USART_COM, buffer_rx, 1000, "AT+PIN0000", 100);
 }
-
 /************************************************************************/
 /* TASKS                                                                */
 /************************************************************************/
-
 void vTimerCallback0(TimerHandle_t xTimer) {
     /* Selecina canal e inicializa conversão */
     afec_channel_enable(AFEC_POT0, AFEC_POT0_CHANNEL);
@@ -557,6 +548,43 @@ void task_bluetooth(void) {
 	}
 }
 
+static void task_led(void *pvParameters) {
+	pmc_enable_periph_clk(ID_PIO_PWM_0R);
+	pio_set_peripheral(PIO_PWM_0R, PIO_PERIPH_B, MASK_PIN_PWM_0R );
+	static pwm_channel_t pwm_channel_pinR;
+	PWM_init(PWM0, ID_PWM0,  &pwm_channel_pinR, PWM_CHANNEL_0, 23);
+
+	pmc_enable_periph_clk(ID_PIO_PWM_0G);
+	pio_set_peripheral(PIO_PWM_0G, PIO_PERIPH_A, MASK_PIN_PWM_0G );
+	static pwm_channel_t pwm_channel_pinG;
+	PWM_init(PWM0, ID_PWM0,  &pwm_channel_pinG, PWM_CHANNEL_1, 23);
+
+	pmc_enable_periph_clk(ID_PIO_PWM_0B);
+	pio_set_peripheral(PIO_PWM_0B, PIO_PERIPH_A, MASK_PIN_PWM_0B );
+	static pwm_channel_t pwm_channel_pinB;
+	PWM_init(PWM0, ID_PWM0,  &pwm_channel_pinB, PWM_CHANNEL_2, 23);
+
+	int duty = 0;
+	rgb rgb;
+	
+	while (1) {
+		RTT_init(1, 1, RTT_MR_ALMIEN);
+		if (xQueueReceive( xQueueRGB, &rgb, 0 )) {
+			pwm_channel_update_duty(PWM0, &pwm_channel_pinR, rgb.r);
+			pwm_channel_update_duty(PWM0, &pwm_channel_pinG, rgb.g);
+			pwm_channel_update_duty(PWM0, &pwm_channel_pinB, rgb.b);
+		}
+
+		// pwm_channel_update_duty(PWM0, &pwm_channel_pinR, 255-duty);
+		// pwm_channel_update_duty(PWM0, &pwm_channel_pinG, 255-duty);
+		// pwm_channel_update_duty(PWM0, &pwm_channel_pinB, 255-duty);
+
+		// pwm_channel_update_duty(PWM0, &pwm_channel_pinR, duty);
+		// pwm_channel_update_duty(PWM0, &pwm_channel_pinG, 255-duty);
+		// pwm_channel_update_duty(PWM0, &pwm_channel_pinB, 255-duty);
+
+	}
+}
 /************************************************************************/
 /* main                                                                 */
 /************************************************************************/
@@ -567,12 +595,16 @@ int main(void) {
 	board_init();
 	configure_console();
   
+	xQueueVALOR = xQueueCreate(32, sizeof(uint) );
+	xQueueRGB = xQueueCreate(32, sizeof(rgb) );
   	xQueueADC = xQueueCreate(100, sizeof(adcData));
-    if (xQueueADC == NULL)
-        printf("falha em criar a queue xQueueADC1 \n");
-        
-    if (xTaskCreate(task_adc, "ADC", TASK_ADC_STACK_SIZE, NULL,
-                    TASK_ADC_STACK_PRIORITY, NULL) != pdPASS) {
+
+	/* Create task to control oled */
+	if (xTaskCreate(task_led, "led", TASK_OLED_STACK_SIZE, NULL,
+	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create task_led\r\n");
+	}
+    if (xTaskCreate(task_adc, "ADC", TASK_ADC_STACK_SIZE, NULL, TASK_ADC_STACK_PRIORITY, NULL) != pdPASS) {
         printf("Failed to create test ADC task\r\n");
     }
 	xTaskCreate(task_handshake, "Handshake", TASK_HANDSHAKE_STACK_SIZE, NULL,
