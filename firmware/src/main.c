@@ -13,6 +13,18 @@
 /* defines                                                              */
 /************************************************************************/
 
+#define PIO_PWM_0R PIOD
+#define ID_PIO_PWM_0R ID_PIOD
+#define MASK_PIN_PWM_0R (1 << 11)
+
+#define PIO_PWM_0G PIOA
+#define ID_PIO_PWM_0G ID_PIOA
+#define MASK_PIN_PWM_0G (1 << 2)
+
+#define PIO_PWM_0B PIOD
+#define ID_PIO_PWM_0B ID_PIOD
+#define MASK_PIN_PWM_0B (1 << 22)
+
 // Botão
 #define BUT_ON_OFF_PIO             	PIOA // TODO: alterar PIO para o botao correto
 #define BUT_ON_OFF_PIO_ID          	ID_PIOA
@@ -71,6 +83,9 @@
 /************************************************************************/
 QueueHandle_t xQueueButton;
 QueueHandle_t xQueueADC;
+QueueHandle_t xQueueVALOR;
+QueueHandle_t xQueueRGB;
+
 TimerHandle_t xTimer;
 
 TaskHandle_t xTaskBluetoothHandle;
@@ -85,6 +100,12 @@ typedef struct {
 	int value;
 } pack;
 
+typedef struct {
+	uint r;
+	uint g;
+	uint b;
+} rgb;
+
 extern void vApplicationStackOverflowHook(xTaskHandle *pxTask,
 signed char *pcTaskName);
 extern void vApplicationIdleHook(void);
@@ -96,6 +117,8 @@ extern void xPortSysTickHandler(void);
 static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel,
                             afec_callback_t callback);
 void task_bluetooth(void);
+void PWM_init(Pwm *p_pwm, uint id_pwm, pwm_channel_t *p_channel, uint channel, uint duty);
+void wheel( uint WheelPos, uint *r, uint *g, uint *b );
 
 /************************************************************************/
 /* constants                                                            */
@@ -105,6 +128,10 @@ void task_bluetooth(void);
 /* variaveis globais                                                    */
 /************************************************************************/
 volatile char flag_sleep = 0;
+volatile char flag_red = 0;
+volatile char flag_green = 0;
+volatile char flag_blue = 0;
+volatile char flag_white = 0;
 /************************************************************************/
 /* RTOS application HOOK                                                */
 /************************************************************************/
@@ -142,18 +169,6 @@ extern void vApplicationMallocFailedHook(void) {
 /************************************************************************/
 /* handlers / callbacks                                                 */
 /************************************************************************/
-
-/************************************************************************/
-/* funcoes                                                              */
-/************************************************************************/
-void but_verde_callback(void){
-	pack p;
-	p.tipo = 'b';
-	p.value = 1;
-	
-	xQueueSendFromISR(xQueueButton, &p, 0);
-}
-
 void but_on_off_callback(void){
 	if (flag_sleep == 0) {
 		pmc_sleep(SAM_PM_SMODE_SLEEP_WFI);
@@ -164,7 +179,16 @@ void but_on_off_callback(void){
 
 }
 
+void but_verde_callback(void){
+	flag_green = 1;
+	pack p;
+	p.tipo = 'b';
+	p.value = 1;
+	xQueueSendFromISR(xQueueButton, &p, 0);
+}
+
 void but_vermelho_callback(void){
+	flag_red = 1;
 	pack p;
 	p.tipo = 'b';
 	p.value = 2;
@@ -172,11 +196,16 @@ void but_vermelho_callback(void){
 }
 
 void but_azul_callback(void){
+	flag_blue = 1;
 	pack p;
 	p.tipo = 'b';
 	p.value = 3;
 	xQueueSendFromISR(xQueueButton, &p, 0);
 }
+
+/************************************************************************/
+/* funcoes                                                              */
+/************************************************************************/
 
 static void AFEC_pot0_callback(void) {
     ADCData adc;
@@ -187,7 +216,7 @@ static void AFEC_pot0_callback(void) {
 
 void io_init(void) {
 
-// Ativa PIOs
+	// Ativa PIOs
 	pmc_enable_periph_clk(ID_PIOA);
 	pmc_enable_periph_clk(ID_PIOB);
 	pmc_enable_periph_clk(ID_PIOC);
@@ -239,6 +268,41 @@ void io_init(void) {
 
 	NVIC_EnableIRQ(BUT_VERMELHO_PIO_ID);
 	NVIC_SetPriority(BUT_VERMELHO_PIO_ID, 4);
+}
+
+void PWM_init(Pwm *p_pwm, uint id_pwm, pwm_channel_t *p_channel, uint channel, uint duty){
+	
+	/* Enable PWM peripheral clock */
+	pmc_enable_periph_clk(id_pwm);
+
+	/* Disable PWM channels for LEDs */
+	pwm_channel_disable(p_pwm, channel);
+
+	/* Set PWM clock A as PWM_FREQUENCY*PERIOD_VALUE (clock B is not used) */
+	pwm_clock_t clock_setting = {
+		.ul_clka = 1000 * 256,
+		.ul_clkb = 0,
+		.ul_mck = sysclk_get_peripheral_hz()
+	};
+	
+	pwm_init(p_pwm, &clock_setting);
+
+	/* Initialize PWM channel for LED0 */
+	/* Period is left-aligned */
+	p_channel->alignment = PWM_ALIGN_CENTER;
+	/* Output waveform starts at a low level */
+	p_channel->polarity = PWM_HIGH;
+	/* Use PWM clock A as source clock */
+	p_channel->ul_prescaler = PWM_CMR_CPRE_CLKA;
+	/* Period value of output waveform */
+	p_channel->ul_period = 256;
+	/* Duty cycle value of output waveform */
+	p_channel->ul_duty = duty;
+	p_channel->channel = channel;
+	pwm_channel_init(p_pwm, p_channel);
+	
+	/* Enable PWM channels for LEDs */
+	pwm_channel_enable(p_pwm, channel);
 }
 
 static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel,
@@ -501,7 +565,6 @@ int main(void) {
 	/* Initialize the SAM system */
 	sysclk_init();
 	board_init();
-
 	configure_console();
   
   	xQueueADC = xQueueCreate(100, sizeof(adcData));
