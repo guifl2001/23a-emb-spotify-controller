@@ -67,13 +67,14 @@
 /************************************************************************/
 /* RTOS                                                                 */
 /************************************************************************/
+#define TASK_LED_STACK_SIZE                (1024*6/sizeof(portSTACK_TYPE))
+#define TASK_LED_STACK_PRIORITY            (tskIDLE_PRIORITY)
 
 #define TASK_BLUETOOTH_STACK_SIZE            (4096/sizeof(portSTACK_TYPE))
 #define TASK_BLUETOOTH_STACK_PRIORITY        (tskIDLE_PRIORITY)
 
 #define TASK_ADC_STACK_SIZE (1024 * 10 / sizeof(portSTACK_TYPE))
 #define TASK_ADC_STACK_PRIORITY (tskIDLE_PRIORITY)
-
 
 #define TASK_HANDSHAKE_STACK_SIZE            (4096/sizeof(portSTACK_TYPE))
 #define TASK_HANDSHAKE_STACK_PRIORITY        (tskIDLE_PRIORITY)
@@ -83,8 +84,6 @@
 /************************************************************************/
 QueueHandle_t xQueueButton;
 QueueHandle_t xQueueADC;
-QueueHandle_t xQueueVALOR;
-QueueHandle_t xQueueRGB;
 
 TimerHandle_t xTimer;
 
@@ -568,21 +567,39 @@ static void task_led(void *pvParameters) {
 	rgb rgb;
 	
 	while (1) {
-		RTT_init(1, 1, RTT_MR_ALMIEN);
-		if (xQueueReceive( xQueueRGB, &rgb, 0 )) {
+		if (flag_blue) {
+			flag_blue = 0;
+			rgb.r = 0;
+			rgb.g = 0;
+			rgb.b = 255;
+			flag_muda_led = 1;
+		}
+		if (flag_red) {
+			flag_red = 0;
+			rgb.r = 255;
+			rgb.g = 0;
+			rgb.b = 0;
+			flag_muda_led = 1;
+		}
+		if (flag_green) {
+			flag_green = 0;
+			rgb.r = 0;
+			rgb.g = 255;
+			rgb.b = 0;
+			flag_muda_led = 1;
+		}
+		if (flag_sleep) {
+			rgb.r = 255;
+			rgb.g = 255;
+			rgb.b = 255;
+			flag_muda_led = 1;
+		}
+		if (flag_muda_led) {
+			flag_muda_led = 0;
 			pwm_channel_update_duty(PWM0, &pwm_channel_pinR, rgb.r);
 			pwm_channel_update_duty(PWM0, &pwm_channel_pinG, rgb.g);
 			pwm_channel_update_duty(PWM0, &pwm_channel_pinB, rgb.b);
 		}
-
-		// pwm_channel_update_duty(PWM0, &pwm_channel_pinR, 255-duty);
-		// pwm_channel_update_duty(PWM0, &pwm_channel_pinG, 255-duty);
-		// pwm_channel_update_duty(PWM0, &pwm_channel_pinB, 255-duty);
-
-		// pwm_channel_update_duty(PWM0, &pwm_channel_pinR, duty);
-		// pwm_channel_update_duty(PWM0, &pwm_channel_pinG, 255-duty);
-		// pwm_channel_update_duty(PWM0, &pwm_channel_pinB, 255-duty);
-
 	}
 }
 /************************************************************************/
@@ -594,14 +611,11 @@ int main(void) {
 	sysclk_init();
 	board_init();
 	configure_console();
-  
-	xQueueVALOR = xQueueCreate(32, sizeof(uint) );
-	xQueueRGB = xQueueCreate(32, sizeof(rgb) );
   	xQueueADC = xQueueCreate(100, sizeof(adcData));
 
-	/* Create task to control oled */
-	if (xTaskCreate(task_led, "led", TASK_OLED_STACK_SIZE, NULL,
-	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
+	/* Create task to control led rgb */
+	if (xTaskCreate(task_led, "led", TASK_LED_STACK_SIZE, NULL,
+	TASK_LED_STACK_PRIORITY, NULL) != pdPASS) {
 		printf("Failed to create task_led\r\n");
 	}
     if (xTaskCreate(task_adc, "ADC", TASK_ADC_STACK_SIZE, NULL, TASK_ADC_STACK_PRIORITY, NULL) != pdPASS) {
