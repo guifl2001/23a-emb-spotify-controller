@@ -34,6 +34,7 @@ class SerialControllerInterface:
             value2 = self.ser.read()
             
             valor = int.from_bytes(value2 + value1, 'big')
+            print(valor)
             if data == b'h':
                 self.ser.write(b'h')
             if data == b'b':
